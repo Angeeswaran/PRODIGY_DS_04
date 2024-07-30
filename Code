@@ -1,0 +1,92 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import re
+import nltk
+from wordcloud import WordCloud
+
+# Download necessary NLTK data
+nltk.download('vader_lexicon')
+nltk.download('stopwords')
+nltk.download('punkt')
+
+# Load the dataset
+df = pd.read_csv('Tweets.csv')  # Make sure to replace with the correct path to your dataset
+
+# Display the first few rows of the dataset
+print(df.head())
+
+# Preprocess the data
+def preprocess_text(text):
+    text = text.lower()  # Convert to lowercase
+    text = re.sub(r'http\S+', '', text)  # Remove URLs
+    text = re.sub(r'@\w+', '', text)  # Remove mentions
+    text = re.sub(r'#\w+', '', text)  # Remove hashtags
+    text = re.sub(r'[^a-z\s]', '', text)  # Remove special characters and numbers
+    tokens = word_tokenize(text)  # Tokenize the text
+    tokens = [word for word in tokens if word not in stopwords.words('english')]  # Remove stopwords
+    return ' '.join(tokens)
+
+df['cleaned_text'] = df['text'].apply(preprocess_text)
+
+# Display the first few rows of the cleaned data
+print(df[['text', 'cleaned_text']].head())
+
+# Initialize the VADER sentiment analyzer
+sid = SentimentIntensityAnalyzer()
+
+# Function to get sentiment score
+def get_sentiment_score(text):
+    return sid.polarity_scores(text)['compound']
+
+df['sentiment_score'] = df['cleaned_text'].apply(get_sentiment_score)
+
+# Categorize sentiment
+df['sentiment'] = df['sentiment_score'].apply(lambda score: 'positive' if score > 0 else ('negative' if score < 0 else 'neutral'))
+
+# Display the first few rows with sentiment
+print(df[['cleaned_text', 'sentiment_score', 'sentiment']].head())
+
+# Distribution of sentiments
+plt.figure(figsize=(10, 6))
+sns.countplot(x='sentiment', data=df)
+plt.title('Sentiment Distribution')
+plt.xlabel('Sentiment')
+plt.ylabel('Count')
+plt.show()
+
+# Sentiment over time (assuming the dataset has a 'tweet_created' column)
+df['tweet_created'] = pd.to_datetime(df['tweet_created'])
+df.set_index('tweet_created', inplace=True)
+
+# Resample and plot average sentiment score over time
+df_resampled = df.resample('D').mean(numeric_only=True)
+df_resampled['sentiment_score'].plot(figsize=(15, 6))
+plt.title('Sentiment Over Time')
+plt.xlabel('Date')
+plt.ylabel('Average Sentiment Score')
+plt.show()
+
+# Word cloud for positive and negative sentiments
+positive_text = ' '.join(df[df['sentiment'] == 'positive']['cleaned_text'])
+negative_text = ' '.join(df[df['sentiment'] == 'negative']['cleaned_text'])
+
+plt.figure(figsize=(15, 6))
+
+plt.subplot(1, 2, 1)
+wordcloud = WordCloud(width=800, height=400, background_color='white').generate(positive_text)
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.title('Positive Sentiment Words')
+plt.axis('off')
+
+plt.subplot(1, 2, 2)
+wordcloud = WordCloud(width=800, height=400, background_color='white').generate(negative_text)
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.title('Negative Sentiment Words')
+plt.axis('off')
+
+plt.show()
